@@ -1,0 +1,50 @@
+# ==============================================================================
+# InsUtilities Git Ignore Configuration
+# ==============================================================================
+
+# --- Visual Studio & IDE Caches ---
+.vs/
+*.db
+*.sqlite
+*.vsidx
+*.opendb
+*.VC.db
+DocumentLayout.json
+VSWorkspaceState.json
+ProjectSettings.json
+
+# --- Compiled Binaries & Plugins ---
+*.dll
+*.so
+*.smx
+
+# --- MSVC / GCC Intermediate Build Artifacts ---
+build/
+bin/
+*.obj
+*.o
+*.exp
+*.lib
+*.pdb
+*.ilk
+*.idb
+*.nativecodeanalysis.xml
+analyze_out.txt
+
+# --- Test Binary Harnesses & Artifacts ---
+source/test/*.exe
+source/test/*.obj
+source/test/test_nav
+
+# --- Game Assets & Test Maps ---
+*.bsp
+*.nav
+*.7z
+*.zip
+
+# --- Temporary & Diagnostic Files ---
+temp/
+__pycache__/
+*.pyc
+*.tmp
+*.log

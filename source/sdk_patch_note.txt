@@ -1,0 +1,4 @@
+SDK patch required to build with clang-cl:
+hl2sdk-episode1/public/mathlib/math_base.h, lines 1083/1111/1160:
+  change:  movzx  eax, CtrlwdHolder
+  to:      mov    eax, CtrlwdHolder
