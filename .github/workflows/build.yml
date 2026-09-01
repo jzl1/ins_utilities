@@ -1,0 +1,142 @@
+name: Build InsUtilities
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create GitHub Release with artifacts'
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Release Tag (e.g. v0.5.9, required if creating release)'
+        required: false
+        default: 'v0.5.9'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # ============================================================================
+  # 1. Build Windows (x86) -> .zip
+  # ============================================================================
+  build-windows:
+    name: Build Windows (x86)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout InsUtilities Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout HL2SDK (Episode 1)
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/hl2sdk
+          ref: episode1
+          path: hl2sdk
+
+      - name: Setup MSVC Developer Environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Build ins_utilities.dll
+        shell: pwsh
+        env:
+          HL2SDK: ${{ github.workspace }}\hl2sdk
+        run: |
+          .\compile_msvc.bat
+
+      - name: Prepare Windows Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "pkg_win/addons" -Force | Out-Null
+          Copy-Item -Path "ins_utilities.dll" -Destination "pkg_win/addons/"
+          Copy-Item -Path "ins_utilities.vdf" -Destination "pkg_win/addons/"
+          Copy-Item -Path "README.md" -Destination "pkg_win/"
+
+          # Create .zip package for Windows
+          Compress-Archive -Path "pkg_win/*" -DestinationPath "ins_utilities-windows-x86.zip" -Force
+
+      - name: Upload Windows Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ins_utilities-windows-x86-package
+          path: ins_utilities-windows-x86.zip
+
+  # ============================================================================
+  # 2. Build Linux (i486) -> .tar.gz
+  # ============================================================================
+  build-linux:
+    name: Build Linux (i486)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout InsUtilities Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout HL2SDK (Episode 1)
+        uses: actions/checkout@v4
+        with:
+          repository: alliedmodders/hl2sdk
+          ref: episode1
+          path: hl2sdk
+
+      - name: Install 32-bit Multilib Dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib g++-multilib
+
+      - name: Build ins_utilities_i486.so
+        run: |
+          make -C linux SDK="${{ github.workspace }}/hl2sdk"
+
+      - name: Prepare Linux Package (.tar.gz)
+        run: |
+          mkdir -p pkg_linux/addons
+          cp ins_utilities_i486.so pkg_linux/addons/
+          cp ins_utilities.vdf pkg_linux/addons/
+          cp README.md pkg_linux/
+
+          # Create .tar.gz package for Linux
+          tar -czf ins_utilities-linux-i486.tar.gz -C pkg_linux .
+
+      - name: Upload Linux Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ins_utilities-linux-i486-package
+          path: ins_utilities-linux-i486.tar.gz
+
+  # ============================================================================
+  # 3. Optional Release Publisher
+  # ============================================================================
+  publish-release:
+    name: Publish Release
+    needs: [build-windows, build-linux]
+    if: ${{ inputs.create_release == true && inputs.release_tag != '' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ins_utilities-windows-x86-package
+          path: release_assets
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ins_utilities-linux-i486-package
+          path: release_assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            release_assets/ins_utilities-windows-x86.zip
+            release_assets/ins_utilities-linux-i486.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
