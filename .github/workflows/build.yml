@@ -9,9 +9,9 @@ on:
         default: false
         type: boolean
       release_tag:
-        description: 'Release Tag (e.g. v0.5.9, required if creating release)'
+        description: 'Release Tag (e.g. v0.5.10, required if creating release)'
         required: false
-        default: 'v0.5.9'
+        default: 'v0.5.10'
         type: string
 
 permissions:

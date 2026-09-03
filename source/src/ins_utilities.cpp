@@ -22,11 +22,11 @@
 #include "variant_t.h"
 #include "engine/IEngineTrace.h"
 
-#define INSUTIL_VERSION_NUM "0.5.9"
+#define INSUTIL_VERSION_NUM "0.5.10"
 #ifdef BUILD_TIMESTAMP
-#define INSUTIL_VERSION "0.5.9 (" BUILD_TIMESTAMP ")"
+#define INSUTIL_VERSION "0.5.10 (" BUILD_TIMESTAMP ")"
 #else
-#define INSUTIL_VERSION "0.5.9 (" __DATE__ " " __TIME__ ")"
+#define INSUTIL_VERSION "0.5.10 (" __DATE__ " " __TIME__ ")"
 #endif
 
 #ifdef _LINUX
@@ -259,7 +259,8 @@ int FindSendPropOffset(SendTable *pTable, const char *pPropName);
 #ifdef _LINUX
 static int s_offset_m_hOwner = INSUTIL_LINUX_M_H_WEAPON_OWNER;
 #else
-static int s_offset_m_hOwner = -1;
+// Audited CBaseCombatWeapon::m_hOwner offset in Windows server.dll (SendTable DT_BaseCombatWeapon, 0x0454 / 1108 decimal).
+static int s_offset_m_hOwner = 0x0454;
 #endif
 static int s_offset_m_CollisionGroup = -1;
 static int s_offset_m_flSimulationTime = -1;
@@ -1939,6 +1940,11 @@ public:
             INSUTIL_LINUX_M_SPAWNFLAGS, INSUTIL_LINUX_M_FL_WAIT,
             INSUTIL_LINUX_M_FL_AUTO_RETURN_DELAY,
             INSUTIL_LINUX_FIRE_EVENT_SLOT, INSUTIL_LINUX_FIRE_EVENT_RVA);
+#else
+        Msg("[ins_utilities] Windows offsets: team=0x%X start=0x%X emergency=0x%X left=0x%X owner=0x%X (%d)\n",
+            s_offset_iTeamNum, s_offset_flStartReinforcementTime,
+            s_offset_bReinforcement, s_offset_iReinforcementsLeft,
+            s_offset_m_hOwner, s_offset_m_hOwner);
 #endif
         Msg("[ins_utilities] v%s Loaded!\n", INSUTIL_VERSION);
         return true;
@@ -2058,10 +2064,65 @@ public:
                 
                 if (cleanWeapons || cleanRagdolls)
                 {
-                    for (int i = gpGlobals->maxClients + 1; i <= engine->GetEntityCount(); i++)
+                    int cleanedWeaponsCount = 0;
+                    int cleanedRagdollsCount = 0;
+                    int totalPool = engine->GetEntityCount();
+                    int activeCount = 0;
+                    int weaponCount = 0;
+                    int otherCount = 0;
+                    char sampleOther[128] = "";
+
+                    // Build lookup of weapons currently carried by living players/bots
+                    bool isCarriedByLivingPlayer[2048] = { false };
+                    if (cleanWeapons && playerinfomanager)
+                    {
+#ifdef _LINUX
+                        int offset_mywep = 0x0A30;
+#else
+                        int offset_mywep = 0x0A24;
+#endif
+                        for (int client = 1; client <= gpGlobals->maxClients; client++)
+                        {
+                            edict_t *pe = engine->PEntityOfEntIndex(client);
+                            if (!pe || pe->IsFree()) continue;
+                            IPlayerInfo *info = playerinfomanager->GetPlayerInfo(pe);
+                            if (!info || !info->IsConnected() || info->IsDead()) continue;
+
+                            IServerUnknown *punk = pe->GetUnknown();
+                            if (!punk) continue;
+                            CBaseEntity *pPlayer = punk->GetBaseEntity();
+                            if (!pPlayer) continue;
+
+                            for (int w = 0; w < 48; w++)
+                            {
+                                unsigned long hWpn = *(unsigned long *)((char *)pPlayer + offset_mywep + w * 4);
+                                int wpnIdx = hWpn & 0xFFF;
+                                if (wpnIdx > gpGlobals->maxClients && wpnIdx < 2048)
+                                {
+                                    isCarriedByLivingPlayer[wpnIdx] = true;
+                                }
+                            }
+                        }
+                    }
+
+                    for (int i = 1; i <= totalPool; i++)
                     {
                         edict_t *e = engine->PEntityOfEntIndex(i);
                         if (!e || e->IsFree()) continue;
+                        activeCount++;
+
+                        const char *wcn = e->GetClassName();
+                        if (wcn && strncmp(wcn, "weapon_", 7) == 0)
+                            weaponCount++;
+                        else
+                        {
+                            otherCount++;
+                            if (!sampleOther[0] && i > gpGlobals->maxClients && wcn)
+                                strncpy(sampleOther, wcn, sizeof(sampleOther) - 1);
+                        }
+
+                        if (i <= gpGlobals->maxClients) continue;
+
                         IServerUnknown *unk = e->GetUnknown();
                         if (!unk) continue;
                         IServerNetworkable *net = unk->GetNetworkable();
@@ -2073,31 +2134,40 @@ public:
                         if (cleanRagdolls && strstr(cname, "Ragdoll"))
                         {
                             engine->RemoveEdict(e);
+                            cleanedRagdollsCount++;
                             continue;
                         }
                         
-                        if (cleanWeapons && (strstr(cname, "Weapon") || strstr(cname, "Item")))
+                        bool isWeapon = false;
+                        if (cleanWeapons)
                         {
-                            if (s_offset_m_hOwner == -1)
-                        {
-                            s_offset_m_hOwner = FindSendPropOffset(sc->m_pTable, "m_hOwner");
-                            if (s_offset_m_hOwner == -1) 
-                                s_offset_m_hOwner = FindSendPropOffset(sc->m_pTable, "m_hOwnerEntity");
-                        }
-                        
-                        if (s_offset_m_hOwner > 0)
-                        {
-                            CBaseEntity *base = unk->GetBaseEntity();
-                            if (base)
+                            if (wcn && strncmp(wcn, "weapon_", 7) == 0)
                             {
-                                unsigned long owner = *(unsigned long *)((char *)base + s_offset_m_hOwner);
-                                if (owner == 0xFFFFFFFF)
-                                {
-                                    engine->RemoveEdict(e);
-                                }
+                                isWeapon = true;
+                            }
+                            else if (cname && (strncmp(cname, "CWeapon", 7) == 0 || strstr(cname, "Weapon") || strstr(cname, "Item")))
+                            {
+                                if (strcmp(cname, "CINSWeaponCache") != 0)
+                                    isWeapon = true;
                             }
                         }
+
+                        if (isWeapon)
+                        {
+                            if (!isCarriedByLivingPlayer[i])
+                            {
+                                engine->RemoveEdict(e);
+                                cleanedWeaponsCount++;
+                            }
                         }
+                    }
+                    if (cleanedWeaponsCount > 0 || cleanedRagdollsCount > 0 || activeCount > 1000)
+                    {
+                        int currentActive = activeCount - cleanedWeaponsCount - cleanedRagdollsCount;
+                        int survivingWeapons = weaponCount - cleanedWeaponsCount;
+                        Msg("[ins_utilities] Battlefield sweep: removed %d dropped weapon(s), %d ragdoll(s) [Active: %d, Free: %d, HighWater: %d/2048] (Census: %d live wpns, %d other [%s])\n",
+                            cleanedWeaponsCount, cleanedRagdollsCount, currentActive, 2048 - currentActive, totalPool,
+                            survivingWeapons, otherCount, sampleOther);
                     }
                 }
             }
