@@ -2077,8 +2077,12 @@ public:
                     if (cleanWeapons && playerinfomanager)
                     {
 #ifdef _LINUX
-                        int offset_mywep = 0x0A30;
+                        // Audited in Linux server_i486.so SendTable DT_BaseCombatCharacter:
+                        // 0x0A30 is m_flNextAttack (float), 0x0A38 is m_hMyWeapons (7 handles).
+                        int offset_mywep = 0x0A38;
 #else
+                        // Audited in Windows server.dll SendTable DT_BaseCombatCharacter:
+                        // 0x0A24 is m_hMyWeapons (7 handles).
                         int offset_mywep = 0x0A24;
 #endif
                         for (int client = 1; client <= gpGlobals->maxClients; client++)
@@ -2093,7 +2097,9 @@ public:
                             CBaseEntity *pPlayer = punk->GetBaseEntity();
                             if (!pPlayer) continue;
 
-                            for (int w = 0; w < 48; w++)
+                            // INS:MIC player inventory holds up to 7 weapons (0x1C bytes).
+                            // Limit scan to 7 slots so we do not read adjacent member variables.
+                            for (int w = 0; w < 7; w++)
                             {
                                 unsigned long hWpn = *(unsigned long *)((char *)pPlayer + offset_mywep + w * 4);
                                 int wpnIdx = hWpn & 0xFFF;
