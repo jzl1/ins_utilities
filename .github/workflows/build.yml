@@ -9,9 +9,9 @@ on:
         default: false
         type: boolean
       release_tag:
-        description: 'Release Tag (e.g. v0.5.10, required if creating release)'
+        description: 'Release Tag (e.g. v0.5.11, required if creating release)'
         required: false
-        default: 'v0.5.10'
+        default: 'v0.5.11'
         type: string
 
 permissions:
@@ -135,6 +135,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag }}
+          name: ${{ inputs.release_tag }}
+          make_latest: true
+          body: |
+            ### What's New in v0.5.11:
+            * **Battlefield Cleanup Weapon Protection:** Audited Linux `m_hMyWeapons` offset (`0x0A38`), preventing active weapons carried by living players and bots from being deleted during cleanup sweeps.
+            * **7-Slot Inventory Boundary:** Strictly constrained living player weapon scans to 7 slots (`w < 7`), preventing out-of-bounds reads into adjacent player variables (`m_hActiveWeapon`, `m_angEyeAngles`).
+            * **Server Stability & Mechanics:** Proximity auto-opening doors, custom door speeds, and client interpolation smoothing guarantees.
           files: |
             release_assets/ins_utilities-windows-x86.zip
             release_assets/ins_utilities-linux-i486.tar.gz
