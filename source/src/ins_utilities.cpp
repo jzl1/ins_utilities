@@ -1428,17 +1428,10 @@ void Cmd_InsUtil()
 }
 static ConCommand ins_util_cmd("ins_util", Cmd_InsUtil, "Insurgency Utilities settings");
 
-#ifdef _LINUX
-static int s_offset_flStartReinforcementTime = INSUTIL_LINUX_M_FL_START_REINFORCEMENT_TIME;
-static int s_offset_bReinforcement = INSUTIL_LINUX_M_B_EMERGENCY_REINFORCEMENT;
-static int s_offset_iReinforcementsLeft = INSUTIL_LINUX_M_I_REINFORCEMENTS_LEFT;
-static int s_offset_iTeamNum = INSUTIL_LINUX_M_I_TEAM_NUM;
-#else
 static int s_offset_flStartReinforcementTime = -1;
 static int s_offset_bReinforcement = -1;
 static int s_offset_iReinforcementsLeft = -1;
 static int s_offset_iTeamNum = -1;
-#endif
 
 static float s_flPlayerDieTime[65] = {0};
 static float s_flNextReinforcementResolve = 0.0f;
@@ -1504,6 +1497,13 @@ static bool ResolveReinforcementOffsets()
         int left = FindSendPropOffset(sc->m_pTable, "m_iReinforcementsLeft");
         int team = FindSendPropOffset(sc->m_pTable, "m_iTeamNum");
 
+#ifdef _LINUX
+        if (start <= 0) start = INSUTIL_LINUX_M_FL_START_REINFORCEMENT_TIME;
+        if (reinforce <= 0) reinforce = INSUTIL_LINUX_M_B_EMERGENCY_REINFORCEMENT;
+        if (left <= 0) left = INSUTIL_LINUX_M_I_REINFORCEMENTS_LEFT;
+        if (team <= 0) team = INSUTIL_LINUX_M_I_TEAM_NUM;
+#endif
+
         if (start <= 0 || team <= 0)
             continue;
 
@@ -1514,6 +1514,34 @@ static bool ResolveReinforcementOffsets()
         Msg("[ins_utilities] Found CPlayTeam offsets: StartTime=%d, bReinforce=%d, Left=%d, TeamNum=%d\n",
             start, reinforce, left, team);
         return true;
+    }
+    return false;
+}
+
+static bool ResolveWeaponOwnerOffset()
+{
+    if (!engine)
+        return false;
+    for (int i = 1; i <= engine->GetEntityCount(); i++)
+    {
+        edict_t *e = engine->PEntityOfEntIndex(i);
+        if (!e || e->IsFree()) continue;
+        IServerUnknown *unk = e->GetUnknown();
+        if (!unk) continue;
+        IServerNetworkable *net = unk->GetNetworkable();
+        if (!net) continue;
+        ServerClass *sc = net->GetServerClass();
+        if (!sc) continue;
+        const char *name = sc->GetName();
+        if (name && (!strncmp(name, "CWeapon", 7) || !strncmp(name, "CINSWeapon", 10) || strstr(name, "CombatWeapon")))
+        {
+            int off = FindSendPropOffset(sc->m_pTable, "m_hOwner");
+            if (off > 0)
+            {
+                s_offset_m_hOwner = off;
+                return true;
+            }
+        }
     }
     return false;
 }
@@ -1603,15 +1631,15 @@ static bool ReadSuddenDeathState(bool *available)
         return false; // GameRules may not exist during early level startup.
 
     int modeIndex = *(int *)((char *)rules + INSUTIL_RUNNING_MODE_INDEX_OFFSET);
-    if (modeIndex < 0 || modeIndex > 2)
+    if (modeIndex != 2)
     {
-        s_bSuddenDeathResolutionFailed = true;
-        SuddenDeathWarning("active game mode index was outside the verified range 0..2");
-        return false;
+        if (available)
+            *available = true;
+        return false; // In INS:MIC (CINSRules::IsModeRunning / RunningMode), mode 2 is the active running mode that supports round extension. Modes 0 and 1 have no CRunningMode instance.
     }
 
     void *mode = *(void **)((char *)rules + INSUTIL_RUNNING_MODE_TABLE_OFFSET
-                            + modeIndex * (int)sizeof(void *));
+                            + 2 * (int)sizeof(void *));
     if (!mode)
         return false; // Transient while the game is constructing the mode.
 
@@ -1993,6 +2021,7 @@ public:
         // All map entities exist here. Applying once at activation also works
         // on an empty/frozen server where simulation time is not advancing.
         ResolveReinforcementOffsets();
+        ResolveWeaponOwnerOffset();
         if (ins_keep_doors_open.GetBool())
             ApplyKeepDoorsOpen();
         if (ins_door_speed.GetFloat() > 0.0f)
