@@ -22,11 +22,11 @@
 #include "variant_t.h"
 #include "engine/IEngineTrace.h"
 
-#define INSUTIL_VERSION_NUM "0.5.11"
+#define INSUTIL_VERSION_NUM "0.5.12"
 #ifdef BUILD_TIMESTAMP
-#define INSUTIL_VERSION "0.5.11 (" BUILD_TIMESTAMP ")"
+#define INSUTIL_VERSION "0.5.12 (" BUILD_TIMESTAMP ")"
 #else
-#define INSUTIL_VERSION "0.5.11 (" __DATE__ " " __TIME__ ")"
+#define INSUTIL_VERSION "0.5.12 (" __DATE__ " " __TIME__ ")"
 #endif
 
 #ifdef _LINUX

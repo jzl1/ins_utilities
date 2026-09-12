@@ -9,9 +9,9 @@ on:
         default: false
         type: boolean
       release_tag:
-        description: 'Release Tag (e.g. v0.5.11, required if creating release)'
+        description: 'Release Tag (e.g. v0.5.12, required if creating release)'
         required: false
-        default: 'v0.5.11'
+        default: 'v0.5.12'
         type: string
 
 permissions:
@@ -138,10 +138,10 @@ jobs:
           name: ${{ inputs.release_tag }}
           make_latest: true
           body: |
-            ### What's New in v0.5.11:
-            * **Battlefield Cleanup Weapon Protection:** Audited Linux `m_hMyWeapons` offset (`0x0A38`), preventing active weapons carried by living players and bots from being deleted during cleanup sweeps.
-            * **7-Slot Inventory Boundary:** Strictly constrained living player weapon scans to 7 slots (`w < 7`), preventing out-of-bounds reads into adjacent player variables (`m_hActiveWeapon`, `m_angEyeAngles`).
-            * **Server Stability & Mechanics:** Proximity auto-opening doors, custom door speeds, and client interpolation smoothing guarantees.
+            ### What's New in v0.5.12:
+            * **Player Death Logging Crash Fix (Linux):** The server could crash with an access violation while logging a `player_death` event. The plugin now guards the string copy that faulted on a NULL pointer and substitutes an empty string, so the round continues normally. A new `fix_strncpy_null` setting (default `1`) turns the guard off if you ever need the unmodified behavior.
+            * **Sudden Death Failsafe - Mode Check Fixed:** The failsafe now only reads the round-extension flag while the game is actually in its round-running mode. Previously it read a mode slot that is not a running-mode object, so the value it inspected was not meaningful.
+            * **Weapon Swap - Owner Detection Hardened:** The weapon swap feature now reads a weapon's owner field from the game's live data instead of trusting a fixed memory offset, so "dropped vs. held" is resolved reliably.
           files: |
             release_assets/ins_utilities-windows-x86.zip
             release_assets/ins_utilities-linux-i486.tar.gz
