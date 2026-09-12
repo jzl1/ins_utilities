@@ -39,7 +39,14 @@ enum InsUtilitiesLinuxOffset
     INSUTIL_LINUX_RPG_SPEED_SIGNATURE_RVA         = 0x006DB0E3,
     INSUTIL_LINUX_RPG_SPEED_IMMEDIATE_RVA         = 0x006DB0E7,
     INSUTIL_LINUX_RPG_THRUST_SIGNATURE_RVA        = 0x006DB196,
-    INSUTIL_LINUX_RPG_THRUST_IMMEDIATE_RVA        = 0x006DB19A
+    INSUTIL_LINUX_RPG_THRUST_IMMEDIATE_RVA        = 0x006DB19A,
+    // V_strncpy(char*, char const*, int) in bin/vstdlib_i486.so.
+    // In this build the executable PT_LOAD segment maps vaddr == file offset
+    // (p_vaddr 0x000000, p_offset 0x000000, align 0x1000), so the symbol VA
+    // below is also its file offset. Audited via:
+    //   readelf -sW --dyn-syms bin/vstdlib_i486.so | grep _Z9V_strncpy
+    //     383: 0000f300 97 FUNC GLOBAL DEFAULT 10 _Z9V_strncpyPcPKci
+    INSUTIL_LINUX_V_STRNCPY_RVA                   = 0x0000F300
 };
 
 #define INSUTIL_LINUX_SERVER_SHA256 \
@@ -48,4 +55,14 @@ enum InsUtilitiesLinuxOffset
     "bdd6250284924ec8fb7cc264c14fb6e796d53444489d6d771d1a6378cf1a03cf"
 #endif
 
+
+// First 7 bytes of the audited V_strncpy prologue:
+//   f300: 83 ec 1c     sub  $0x1c,%esp
+//   f303: 89 74 24 14  mov  %esi,0x14(%esp)
+//   f307: 8b 74 24 28  mov  0x28(%esp),%esi
+#define INSUTIL_V_STRNCPY_PROLOGUE \
+    { 0x83, 0xEC, 0x1C, 0x89, 0x74, 0x24, 0x14 }
+
+// push imm32 (5 bytes) + ret (1 byte). Platform-independent.
+#define INSUTIL_V_STRNCPY_PATCH_LEN 6
 #endif

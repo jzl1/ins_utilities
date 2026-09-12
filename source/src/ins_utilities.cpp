@@ -254,6 +254,7 @@ CfgVar ins_door_speed("door_speed", "200", "Door movement speed in degrees/sec o
 CfgVar ins_weapon_swap("weapon_swap", "1", "Aim + +use (F key) weapon drop and swap: 0=off, 1=players only, 2=players and bots");
 CfgVar ins_weapon_swap_range("weapon_swap_range", "100", "Maximum distance in Source units to target a dropped weapon for swap");
 CfgVar ins_door_smoothness("door_smoothness", "1", "Maximize door opening/closing animation smoothness: 1=on, 0=off");
+CfgVar ins_fix_strncpy_null("fix_strncpy_null", "1", "Guard V_strncpy against a NULL source (prevents the GetNetworkIDString crash); 1=on, 0=off");
 
 int FindSendPropOffset(SendTable *pTable, const char *pPropName);
 #ifdef _LINUX
@@ -1363,6 +1364,164 @@ static void UpdateRpgLaunchSpeed()
 #endif
 }
 
+// ============================================================================
+// V_strncpy NULL-source guard
+//
+// CBasePlayer::GetNetworkIDString() calls V_strncpy(dest, id, 64) where `id`
+// is whatever engine->GetPlayerNetworkIDString() returned. That engine call
+// returns NULL by design when the edict is no longer resolvable among sv's
+// clients (CVEngineServer::GetPlayerNetworkIDString has explicit NULL exits),
+// and neither the caller nor V_strncpy checks. glibc's strncpy then reads from
+// NULL and the server dies inside CEventLog::PrintPlayerEvent while logging
+// player_death.
+//
+// V_strncpy lives in bin/vstdlib_i486.so and is reached by 167 relocations
+// from server_i486.so, so replacing that one body protects every caller
+// (server, engine, SourceMod and insbots alike). The replacement reimplements
+// the shipping semantics exactly (hl2sdk-episode1/tier1/strtools.cpp:581-592)
+// plus a NULL guard.
+// ============================================================================
+// V_strncpy sits on a shared .text page, so the page must keep PROT_EXEC while
+// it is writable: srcds is multithreaded and other functions on the same page
+// may run during the patch window. The existing MakeWritable() deliberately
+// sets PROT_READ|PROT_WRITE only (correct for the RPG *data* operand patch),
+// so this block needs its own exec-capable pair.
+#ifdef _LINUX
+static bool MakeWritableExec(void *addr, size_t size)
+{
+    return SetMemProtect(addr, size, PROT_READ | PROT_WRITE | PROT_EXEC);
+}
+#endif
+
+static void *s_vstrncpyTarget = NULL;
+static unsigned char s_vstrncpyOriginal[INSUTIL_V_STRNCPY_PATCH_LEN];
+static bool s_vstrncpyPatched = false;
+static unsigned int s_vstrncpyGuardedCalls = 0;
+
+// cdecl, matching the target ABI (args on the stack, caller cleans up).
+extern "C" void InsUtilVStrncpySafe(char *pDest, const char *pSrc, int maxLen)
+{
+    if (pSrc == NULL)
+    {
+        pSrc = "";
+        ++s_vstrncpyGuardedCalls;
+        if (s_vstrncpyGuardedCalls <= 5 || (s_vstrncpyGuardedCalls % 100) == 0)
+            Msg("[ins_utilities] V_strncpy NULL source guarded (hit #%u)\n",
+                s_vstrncpyGuardedCalls);
+    }
+    if (maxLen <= 0) return;
+    strncpy(pDest, pSrc, (size_t)maxLen);
+    pDest[maxLen - 1] = '\0';
+}
+
+#ifdef _LINUX
+static void *FindVStrncpyTarget()
+{
+    InsModuleInfo m = {0};
+    m.needle = "vstdlib_i486.so";
+    dl_iterate_phdr(InsModuleCallback, &m);
+    if (!m.phdrs) return NULL;
+    return (void *)(m.base + INSUTIL_LINUX_V_STRNCPY_RVA);
+}
+
+static bool InstallVStrncpyGuard()
+{
+    if (s_vstrncpyPatched) return true;
+
+    void *target = FindVStrncpyTarget();
+    if (!target)
+    {
+        Msg("[ins_utilities] V_strncpy guard unavailable: vstdlib_i486.so not mapped\n");
+        return false;
+    }
+
+    static const unsigned char expected[] = INSUTIL_V_STRNCPY_PROLOGUE;
+    if (memcmp(target, expected, sizeof(expected)) != 0)
+    {
+        Msg("[ins_utilities] V_strncpy guard unavailable: prologue mismatch at %p\n", target);
+        return false;
+    }
+
+    memcpy(s_vstrncpyOriginal, target, INSUTIL_V_STRNCPY_PATCH_LEN);
+
+    // push imm32 ; ret   -> transfers to InsUtilVStrncpySafe without touching
+    // any register (eax/ecx/edx/esi/edi/ebp are all preserved), so this is safe
+    // to place at a function entry. Control never returns into the old body.
+    unsigned char patch[INSUTIL_V_STRNCPY_PATCH_LEN];
+    patch[0] = 0x68;
+    unsigned long dest = (unsigned long)(uintptr_t)&InsUtilVStrncpySafe;
+    memcpy(&patch[1], &dest, sizeof(dest));
+    patch[5] = 0xC3;
+
+    if (!MakeWritableExec(target, sizeof(patch)))
+    {
+        Msg("[ins_utilities] V_strncpy guard unavailable: .text page is protected\n");
+        return false;
+    }
+    memcpy(target, patch, sizeof(patch));
+    __builtin___clear_cache((char *)target, (char *)target + sizeof(patch));
+    if (!RestoreProtection(target, sizeof(patch), 0 /* ignored on Linux */, true))
+    {
+        Msg("[ins_utilities] WARNING: could not restore V_strncpy .text page protection\n");
+    }
+
+    s_vstrncpyTarget = target;
+    s_vstrncpyPatched = true;
+    Msg("[ins_utilities] V_strncpy NULL guard installed (rva=0x%X target=%p)\n",
+        INSUTIL_LINUX_V_STRNCPY_RVA, target);
+    return true;
+}
+
+static void UninstallVStrncpyGuard()
+{
+    if (!s_vstrncpyPatched || !s_vstrncpyTarget) return;
+    if (MakeWritableExec(s_vstrncpyTarget, INSUTIL_V_STRNCPY_PATCH_LEN))
+    {
+        memcpy(s_vstrncpyTarget, s_vstrncpyOriginal, INSUTIL_V_STRNCPY_PATCH_LEN);
+        __builtin___clear_cache((char *)s_vstrncpyTarget,
+                                (char *)s_vstrncpyTarget + INSUTIL_V_STRNCPY_PATCH_LEN);
+        RestoreProtection(s_vstrncpyTarget, INSUTIL_V_STRNCPY_PATCH_LEN, 0 /* ignored on Linux */, true);
+    }
+    else
+    {
+        Msg("[ins_utilities] WARNING: could not restore V_strncpy (page protected)\n");
+    }
+    s_vstrncpyTarget = NULL;
+    s_vstrncpyPatched = false;
+}
+
+// Mirrors UpdateRpgLaunchSpeed(): reconciled once per frame so the cvar can be
+// toggled at runtime. Configs execute after Load(), so the cvar test must not
+// live in Load().
+static void UpdateVStrncpyGuard()
+{
+    if (ins_fix_strncpy_null.GetBool())
+    {
+        if (!s_vstrncpyPatched) InstallVStrncpyGuard();
+    }
+    else if (s_vstrncpyPatched)
+    {
+        UninstallVStrncpyGuard();
+        Msg("[ins_utilities] V_strncpy NULL guard removed (fix_strncpy_null 0)\n");
+    }
+}
+#else
+// Windows: server.dll does not import V_strncpy at all. Its imports are
+// KERNEL32/USER32/tier0/vstdlib{GetCVarIF, CUniformRandomStream::ctor,
+// RandomFloat, KeyValuesSystem, RandomSeed, RandomInt}; the literal strings
+// "V_strncpy", "Q_strncpy" and "strncpy" are absent. The helper is statically
+// linked and/or inlined there, so there is no single shared target address and
+// nothing to patch. Do not patch blind.
+static bool InstallVStrncpyGuard()
+{
+    Msg("[ins_utilities] V_strncpy NULL guard unavailable on this platform "
+        "(V_strncpy is statically linked into server.dll)\n");
+    return false;
+}
+
+static void UninstallVStrncpyGuard() {}
+static void UpdateVStrncpyGuard() {}
+#endif
 void Cmd_InsUtil()
 {
     int argc = engine->Cmd_Argc();
@@ -1959,6 +2118,7 @@ public:
         if (s_pEventManager && ins_mute_killfeed.GetBool())
             InstallFireEventHook();
         InstallRpgSpeedPatch();
+        InstallVStrncpyGuard();
 #ifdef _LINUX
         Msg("[ins_utilities] Linux offsets: team=0x%X start=0x%X emergency=0x%X left=0x%X owner=0x%X\n",
             s_offset_iTeamNum, s_offset_flStartReinforcementTime,
@@ -1981,6 +2141,7 @@ public:
     virtual void Unload(void) 
     { 
         UninstallRpgSpeedPatch();
+        UninstallVStrncpyGuard();
         UninstallFireEventHook();
         if (g_pCVar) g_pCVar->UnlinkVariables(FCVAR_PLUGIN);
         Msg("[ins_utilities] Unloaded!\n"); 
@@ -2060,6 +2221,7 @@ public:
             }
 
             UpdateRpgLaunchSpeed();
+            UpdateVStrncpyGuard();
 
             bool cleanWeapons = ins_cleanup_weapons.GetBool();
             bool cleanRagdolls = ins_cleanup_ragdolls.GetBool();
