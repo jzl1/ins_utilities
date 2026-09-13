@@ -119,6 +119,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # softprops/action-gh-release creates LIGHTWEIGHT tags, which do not carry a
+      # tagger or date. This repo's earlier release tags are annotated, so build the
+      # annotated tag here FIRST and let the release step below reuse that ref
+      # instead of creating a lightweight one of its own.
+      - name: Create Annotated Tag
+        env:
+          TAG: ${{ inputs.release_tag }}
+          TARGET: ${{ github.sha }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          existing=$(git ls-remote --tags origin "refs/tags/${TAG}")
+          if [ -n "$existing" ]; then
+            # An annotated tag has a peeled "^{}" line; a lightweight tag does not.
+            peeled=$(git ls-remote --tags origin "refs/tags/${TAG}^{}")
+            if [ -n "$peeled" ]; then
+              echo "Tag ${TAG} already exists and is annotated; leaving it untouched."
+            else
+              echo "::warning::Tag ${TAG} already exists but is LIGHTWEIGHT, not annotated. Leaving it as-is; delete the tag and re-run to replace it with an annotated one."
+            fi
+          else
+            git tag -a "${TAG}" "${TARGET}" -m "${TAG}"
+            git push origin "refs/tags/${TAG}"
+            echo "Created annotated tag ${TAG} at ${TARGET}."
+          fi
       - name: Download Windows Artifacts
         uses: actions/download-artifact@v4
         with:
