@@ -19,6 +19,7 @@
 #include "datamap.h"
 #include "igameevents.h"
 #include "linux_offsets.h"
+#include "voice_fix.h"
 #include "variant_t.h"
 #include "engine/IEngineTrace.h"
 
@@ -255,6 +256,7 @@ CfgVar ins_weapon_swap("weapon_swap", "1", "Aim + +use (F key) weapon drop and s
 CfgVar ins_weapon_swap_range("weapon_swap_range", "100", "Maximum distance in Source units to target a dropped weapon for swap");
 CfgVar ins_door_smoothness("door_smoothness", "1", "Maximize door opening/closing animation smoothness: 1=on, 0=off");
 CfgVar ins_fix_strncpy_null("fix_strncpy_null", "1", "Guard V_strncpy against a NULL source (prevents the GetNetworkIDString crash); 1=on, 0=off");
+CfgVar ins_voice_fix("voice_fix", "1", "Clamp CLC/SVC_VoiceData length to the engine's 4096-byte voice buffer (fixes the remote stack overflow RCE); 1=on, 0=off");
 
 int FindSendPropOffset(SendTable *pTable, const char *pPropName);
 #ifdef _LINUX
@@ -2119,6 +2121,12 @@ public:
             InstallFireEventHook();
         InstallRpgSpeedPatch();
         InstallVStrncpyGuard();
+        // The voice-read clamp is a security fix and defaults on; unlike the
+        // V_strncpy guard it also resolves on Windows (engine.dll is patched by
+        // signature there).  A build whose handler shape does not match is
+        // refused with a log line rather than patched blind.
+        if (ins_voice_fix.GetBool())
+            VoiceFixInstall();
 #ifdef _LINUX
         Msg("[ins_utilities] Linux offsets: team=0x%X start=0x%X emergency=0x%X left=0x%X owner=0x%X\n",
             s_offset_iTeamNum, s_offset_flStartReinforcementTime,
@@ -2142,6 +2150,7 @@ public:
     { 
         UninstallRpgSpeedPatch();
         UninstallVStrncpyGuard();
+        VoiceFixRemove();
         UninstallFireEventHook();
         if (g_pCVar) g_pCVar->UnlinkVariables(FCVAR_PLUGIN);
         Msg("[ins_utilities] Unloaded!\n"); 
@@ -2222,6 +2231,7 @@ public:
 
             UpdateRpgLaunchSpeed();
             UpdateVStrncpyGuard();
+            VoiceFixUpdate(ins_voice_fix.GetBool());
 
             bool cleanWeapons = ins_cleanup_weapons.GetBool();
             bool cleanRagdolls = ins_cleanup_ragdolls.GetBool();

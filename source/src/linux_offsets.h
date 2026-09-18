@@ -46,7 +46,15 @@ enum InsUtilitiesLinuxOffset
     // below is also its file offset. Audited via:
     //   readelf -sW --dyn-syms bin/vstdlib_i486.so | grep _Z9V_strncpy
     //     383: 0000f300 97 FUNC GLOBAL DEFAULT 10 _Z9V_strncpyPcPKci
-    INSUTIL_LINUX_V_STRNCPY_RVA                   = 0x0000F300
+    INSUTIL_LINUX_V_STRNCPY_RVA                   = 0x0000F300,
+
+    // Voice-read RCE fix. CGameClient::ProcessVoiceData in
+    // bin/engine_i686.so (SHA-256 bdd6250284924ec8fb7cc264c14fb6e796d53444489d6d771d1a6378cf1a03cf).
+    // The handler exports both symbols, so discovery is dlsym + a rel32 call
+    // scan rather than a byte signature; these RVAs are the cross-check that
+    // the scanned call site is the one audited on 2026-09-10.
+    INSUTIL_LINUX_VOICE_HANDLER_RVA               = 0x0024E140,
+    INSUTIL_LINUX_VOICE_READBITS_CALL_RVA         = 0x0024E170
 };
 
 #define INSUTIL_LINUX_SERVER_SHA256 \

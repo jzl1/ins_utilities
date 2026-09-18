@@ -55,7 +55,7 @@ set DEFS=/D_WIN32 /DWIN32 /D_WINDOWS /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /DVERSIO
 set INCLUDES=/I source/src /I source/src/shims /I "%SDK%\public" /I "%SDK%\public\tier0" /I "%SDK%\public\tier1" /I "%SDK%\public\dlls" /I "%SDK%\dlls" /I "%SDK%\public\engine" /I "%SDK%\public\vstdlib" /I "%SDK%\public\mathlib" /I "%SDK%\game_shared" /I "%SDK%\tier1"
 
 echo Compiling ins_utilities sources with MSVC (UTC: %BUILD_TIME%)...
-cl.exe /nologo /O2 /Oi- /GS- /GR- /EHs-c- /W3 %DEFS% %INCLUDES% /Fo:build/ /c source/src/crt_stub.cpp source/src/sdk_glue.cpp source/src/cfgvar.cpp source/src/ins_utilities.cpp "%SDK%\tier1\convar.cpp"
+cl.exe /nologo /O2 /Oi- /GS- /GR- /EHs-c- /W3 %DEFS% %INCLUDES% /Fo:build/ /c source/src/crt_stub.cpp source/src/sdk_glue.cpp source/src/cfgvar.cpp source/src/voice_fix.cpp source/src/ins_utilities.cpp "%SDK%\tier1\convar.cpp"
 
 if %ERRORLEVEL% NEQ 0 (
     echo Compilation failed!
@@ -140,7 +140,7 @@ echo time
 lib.exe /nologo /def:build\msvcrt.def /out:build\msvcrt.lib /machine:x86
 
 echo Linking ins_utilities.dll...
-link.exe /nologo /dll /machine:x86 /nodefaultlib /entry:_DllMainCRTStartup /out:ins_utilities.dll build\crt_stub.obj build\sdk_glue.obj build\cfgvar.obj build\ins_utilities.obj build\convar.obj "%SDK%\lib\public\tier0.lib" "%SDK%\lib\public\vstdlib.lib" build\msvcrt.lib kernel32.lib
+link.exe /nologo /dll /machine:x86 /nodefaultlib /entry:_DllMainCRTStartup /out:ins_utilities.dll build\crt_stub.obj build\sdk_glue.obj build\cfgvar.obj build\voice_fix.obj build\ins_utilities.obj build\convar.obj "%SDK%\lib\public\tier0.lib" "%SDK%\lib\public\vstdlib.lib" build\msvcrt.lib kernel32.lib
 
 if %ERRORLEVEL% EQU 0 (
     echo SUCCESS: ins_utilities.dll compiled and built successfully!
