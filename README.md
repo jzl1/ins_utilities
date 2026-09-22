@@ -1,6 +1,6 @@
 # ins_utilities
 
-A lightweight C++ Metamod:Source server plugin providing quality-of-life enhancements, gameplay mechanics, and server stability fixes for *Insurgency: Modern Infantry Combat* (Source 2006 / Episode 1 Engine, SRCDS build 4044).
+A lightweight C++ Valve Server Plugin (VSP) providing quality-of-life enhancements, gameplay mechanics, and server stability fixes for *Insurgency: Modern Infantry Combat* (Source 2006 / Episode 1 Engine, SRCDS build 4044). It loads directly from `addons/ins_utilities.vdf` and does not require MetaMod:Source.
 
 ---
 
