@@ -57,3 +57,29 @@ ins_util set keep_doors_open 1
 ins_util set weapon_swap 1
 ins_util set weapon_swap_range 100
 ```
+
+---
+
+## License
+
+Released under the [GNU General Public License v3.0](LICENSE).
+
+Copyright (c) 2026 jzl1
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+### What this means in practice
+
+You are free to run, study, modify and redistribute ins_utilities, including on
+your own server and including as part of a paid server hosting service. If you
+distribute a modified version, you must make its complete source code available
+under the same license, and you may not add restrictions of your own on top.

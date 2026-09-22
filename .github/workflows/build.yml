@@ -55,6 +55,7 @@ jobs:
           Copy-Item -Path "ins_utilities.dll" -Destination "pkg_win/addons/"
           Copy-Item -Path "ins_utilities.vdf" -Destination "pkg_win/addons/"
           Copy-Item -Path "README.md" -Destination "pkg_win/"
+          Copy-Item -Path "LICENSE" -Destination "pkg_win/"
 
           # Create .zip package for Windows
           Compress-Archive -Path "pkg_win/*" -DestinationPath "ins_utilities-windows-x86.zip" -Force
@@ -99,6 +100,7 @@ jobs:
           cp ins_utilities_i486.so pkg_linux/addons/
           cp ins_utilities.vdf pkg_linux/addons/
           cp README.md pkg_linux/
+          cp LICENSE pkg_linux/
 
           # Create .tar.gz package for Linux
           tar -czf ins_utilities-linux-i486.tar.gz -C pkg_linux .
