@@ -20,7 +20,7 @@ INC += -I$(SDK)/public/engine -I$(SDK)/public/vstdlib -I$(SDK)/public/mathlib
 INC += -I$(SDK)/game_shared -I$(SDK)/tier1
 CFLAGS := $(ARCH) $(DEFS) $(WARN) $(INC) -fPIC
 
-OBJS := $(BUILD)/sdk_glue.o $(BUILD)/cfgvar.o $(BUILD)/voice_fix.o $(BUILD)/ins_utilities.o $(BUILD)/convar.o
+OBJS := $(BUILD)/sdk_glue.o $(BUILD)/cfgvar.o $(BUILD)/voice_fix.o $(BUILD)/vehicle_exit_fix.o $(BUILD)/ins_utilities.o $(BUILD)/convar.o
 
 all: $(OUT)
 
@@ -34,7 +34,10 @@ $(BUILD)/convar.o: $(SDK)/tier1/convar.cpp | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OUT): $(OBJS)
-	$(CC) -m32 -shared -o $@ $(OBJS) -L$(SDK)/linux_sdk -l:tier0_i486.so -l:vstdlib_i486.so -lm -ldl
+	# -Wl,--no-undefined turns a missing object file into a hard link error.
+	# Without it `-shared` happily emits a plugin with unresolved symbols,
+	# which then fails at runtime instead of at build time.
+	$(CC) -m32 -shared -Wl,--no-undefined -o $@ $(OBJS) -L$(SDK)/linux_sdk -l:tier0_i486.so -l:vstdlib_i486.so -lm -ldl
 
 clean:
 	rm -rf $(BUILD) $(OUT)

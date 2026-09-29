@@ -20,6 +20,7 @@
 #include "igameevents.h"
 #include "linux_offsets.h"
 #include "voice_fix.h"
+#include "vehicle_exit_fix.h"
 #include "variant_t.h"
 #include "engine/IEngineTrace.h"
 
@@ -257,6 +258,7 @@ CfgVar ins_weapon_swap_range("weapon_swap_range", "100", "Maximum distance in So
 CfgVar ins_door_smoothness("door_smoothness", "1", "Maximize door opening/closing animation smoothness: 1=on, 0=off");
 CfgVar ins_fix_strncpy_null("fix_strncpy_null", "1", "Guard V_strncpy against a NULL source (prevents the GetNetworkIDString crash); 1=on, 0=off");
 CfgVar ins_voice_fix("voice_fix", "1", "Clamp CLC/SVC_VoiceData length to the engine's 4096-byte voice buffer (fixes the remote stack overflow RCE); 1=on, 0=off");
+CfgVar ins_vehicle_exit_fix("vehicle_exit_fix", "1", "Restore the vehicle per-frame dispatch IMIC omits and clear the stuck entry/exit animation flags that block driver exit; 1=on, 0=off");
 
 int FindSendPropOffset(SendTable *pTable, const char *pPropName);
 #ifdef _LINUX
@@ -1562,6 +1564,13 @@ void Cmd_InsUtil()
         Msg("%s\n", INSUTIL_VERSION);
         return;
     }
+    if (!_stricmp(sub, "vehicle_exit_status"))
+    {
+        Msg("[ins_utilities] vehicle_exit_fix: %s, dispatched=%lu\n",
+            VehicleExitFixReady() ? "READY" : "not ready",
+            VehicleExitFixDispatchCount());
+        return;
+    }
     if (!_stricmp(sub, "set"))
     {
         if (argc < 4) { Msg("[ins_utilities] usage: ins_util set <name> <value>\n"); return; }
@@ -1583,6 +1592,13 @@ void Cmd_InsUtil()
                 InstallFireEventHook();
             else
         UninstallFireEventHook();
+        }
+        if (!_stricmp(c->Name(), "vehicle_exit_fix"))
+        {
+            if (c->GetBool())
+                VehicleExitFixInstall();
+            else
+                VehicleExitFixRemove();
         }
         return;
     }
@@ -2119,6 +2135,10 @@ public:
         // user runs "ins_util set mute_killfeed 1".
         if (s_pEventManager && ins_mute_killfeed.GetBool())
             InstallFireEventHook();
+        // Restore the vehicle per-frame dispatch IMIC's CBasePlayer::ItemPostFrame
+        // omits. Without it a seated driver can never exit - see vehicle_exit_fix.h.
+        if (ins_vehicle_exit_fix.GetBool())
+            VehicleExitFixInstall();
         InstallRpgSpeedPatch();
         InstallVStrncpyGuard();
         // The voice-read clamp is a security fix and defaults on; unlike the
@@ -2148,6 +2168,7 @@ public:
 
     virtual void Unload(void) 
     { 
+        VehicleExitFixRemove();
         UninstallRpgSpeedPatch();
         UninstallVStrncpyGuard();
         VoiceFixRemove();
@@ -2207,6 +2228,11 @@ public:
 
         if (simulating && gpGlobals)
         {
+            // Restore the vehicle dispatch IMIC omits, before anything else in
+            // the frame reads player state. See vehicle_exit_fix.h.
+            if (ins_vehicle_exit_fix.GetBool())
+                VehicleExitFixFrame();
+
             if (s_flMapStartTime == 0.0f) 
                 s_flMapStartTime = gpGlobals->curtime;
                 
