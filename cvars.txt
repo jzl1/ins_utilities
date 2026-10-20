@@ -1,0 +1,41 @@
+================================================================================
+  INS_UTILITIES - CVAR LIST
+================================================================================
+You can execute these commands in your server console or config file.
+Plugin cvars use:   ins_util set <name> <value>
+================================================================================
+
+// =================== RESPAWN & CLEANUP ===================
+
+ins_util set instant_respawn          "0" // toggle instant respawns (1=on, 0=off)
+ins_util set cleanup_weapons          "0" // automatically remove dropped weapons/items
+ins_util set cleanup_ragdolls         "0" // automatically remove server-side ragdolls
+ins_util set cleanup_blood            "0" // automatically clear blood and bullet decals for all players
+ins_util set cleanup_interval         "10.0" // how often to clean the battlefield (seconds)
+
+// =================== MAP ROTATION ===================
+
+ins_util set force_map_switch         "0" // forcefully switch to a random map from mapcycle.txt after X seconds
+ins_util set sudden_death_map_switch  "0" // force the next map after X seconds of actual sudden death
+ins_util set force_map_switch_idle    "0" // force the next map after X seconds of empty server (0 players and 0 bots)
+
+// =================== DOORS ===================
+
+ins_util set keep_doors_open          "1" // keep doors opened by players or bots open until explicitly closed via +use (bump-closing disabled; 1=on, 0=off)
+ins_util set door_auto_open           "1" // auto-open doors on proximity: 0=off, 1=bots only, 2=bots and human players
+ins_util set door_auto_open_radius    "120" // distance in Source units to trigger door auto-open
+ins_util set door_speed               "200" // door movement speed in degrees/sec or units/sec (0=use map default)
+ins_util set door_smoothness          "1" // maximize door opening/closing animation smoothness: 1=on, 0=off
+
+// =================== WEAPONS & GAMEPLAY ===================
+
+ins_util set mute_killfeed            "0" // mute built-in kill messages (KIA, TK) via vtable hook (1=on, 0=off)
+ins_util set rpg_speed                "0" // RPG projectile speed in units/sec (0=leave the game's normal speed unchanged)
+ins_util set weapon_swap              "1" // aim + +use (F key) weapon drop and swap: 0=off, 1=players only, 2=players and bots
+ins_util set weapon_swap_range        "100" // maximum distance in Source units to target a dropped weapon for swap
+
+// =================== ENGINE FIXES ===================
+
+ins_util set fix_strncpy_null         "1" // guard V_strncpy against a NULL source (prevents the GetNetworkIDString crash); 1=on, 0=off
+ins_util set voice_fix                "1" // clamp CLC/SVC_VoiceData length to the engine's 4096-byte voice buffer (fixes the remote stack overflow RCE); 1=on, 0=off
+ins_util set vehicle_exit_fix         "1" // restore the vehicle per-frame dispatch IMIC omits and clear the stuck entry/exit animation flags that block driver exit; 1=on, 0=off
